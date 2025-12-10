@@ -13,8 +13,8 @@ pnpm dev
 # or
 bun dev
 ```
-
-
+prida
+gg
 tsstttt
 
 FE
