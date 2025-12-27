@@ -1,34 +1,21 @@
 'use client';
 
-import { useState } from 'react';
-import { Plus, Search, AlertCircle } from 'lucide-react';
-import { CekKesehatan } from '@/lib/types';
-
-const mockKesehatan: CekKesehatan[] = [
-  {
-    cek_id: '1',
-    tanggal: '2025-12-08',
-    ayam_id: '1',
-    nama_kandang: 'Kandang A1',
-    jum_sakit: 0,
-    jum_mati: 0,
-    catatan: 'Normal'
-  },
-  {
-    cek_id: '2',
-    tanggal: '2025-12-07',
-    ayam_id: '2',
-    nama_kandang: 'Kandang A2',
-    jum_sakit: 5,
-    jum_mati: 1,
-    catatan: 'Beberapa ayam terlihat lesu disaat pagi hari'
-  }
-];
+import { useState, useEffect } from 'react';
+import { Plus, Search, AlertCircle, Trash2, Edit2 } from 'lucide-react';
+import { CekKesehatan, Ayam } from '@/lib/types';
+import { toast } from 'sonner';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 export function Kesehatan() {
   const [activeTab, setActiveTab] = useState<'cek' | 'riwayat'>('cek');
   const [searchTerm, setSearchTerm] = useState('');
-  const [formData, setFormData] = useState<Partial<CekKesehatan>>({
+  const [listKesehatan, setListKesehatan] = useState<CekKesehatan[]>([]);
+  const [listAyam, setListAyam] = useState<Ayam[]>([]); // Dropdown choices
+  const [loading, setLoading] = useState(true);
+
+  // Form State
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [formData, setFormData] = useState({
     tanggal: new Date().toISOString().split('T')[0],
     ayam_id: '',
     jum_sakit: 0,
@@ -36,9 +23,107 @@ export function Kesehatan() {
     catatan: ''
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Confirm Dialog State
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [resKesehatan, resAyam] = await Promise.all([
+        fetch('/api/kesehatan'),
+        fetch('/api/ayam') // We need ayam_id to link health check to a batch/cage
+      ]);
+
+      if (resKesehatan.ok) {
+        const data = await resKesehatan.json();
+        setListKesehatan(data);
+      }
+      if (resAyam.ok) {
+        const data = await resAyam.json();
+        setListAyam(data);
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    alert('Data kesehatan berhasil disimpan!');
+
+    try {
+      const url = '/api/kesehatan';
+      const method = editingId ? 'PUT' : 'POST';
+      const body = editingId
+        ? { ...formData, cek_id: editingId }
+        : formData;
+
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Gagal menyimpan data');
+      }
+
+      await fetchData();
+      toast.success(`Data berhasil ${editingId ? 'diperbarui' : 'disimpan'}!`);
+      handleReset();
+      setActiveTab('riwayat'); // Switch to history to see result
+    } catch (error: any) {
+      console.error('Error saving data:', error);
+      toast.error(`Gagal menyimpan data: ${error.message}`);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    setPendingDeleteId(id);
+    setIsConfirmOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDeleteId) return;
+
+    try {
+      const response = await fetch(`/api/kesehatan?id=${pendingDeleteId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Gagal menghapus data');
+      }
+      await fetchData();
+      toast.success('Data berhasil dihapus!');
+    } catch (error: any) {
+      console.error('Error deleting data:', error);
+      toast.error(`Gagal menghapus data: ${error.message}`);
+    }
+  };
+
+  const handleEdit = (data: CekKesehatan) => {
+    setEditingId(data.cek_id);
+    setFormData({
+      tanggal: data.tanggal.split('T')[0], // Ensure date format for input
+      ayam_id: data.ayam_id,
+      jum_sakit: data.jum_sakit,
+      jum_mati: data.jum_mati,
+      catatan: data.catatan
+    });
+    setActiveTab('cek'); // Switch to input form
+  };
+
+  const handleReset = () => {
+    setEditingId(null);
     setFormData({
       tanggal: new Date().toISOString().split('T')[0],
       ayam_id: '',
@@ -48,7 +133,7 @@ export function Kesehatan() {
     });
   };
 
-  const filteredKesehatan = mockKesehatan.filter(data =>
+  const filteredKesehatan = listKesehatan.filter(data =>
     (data.nama_kandang?.toLowerCase().includes(searchTerm.toLowerCase()) || '') ||
     data.catatan.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -60,14 +145,25 @@ export function Kesehatan() {
         <p className="text-gray-600">Monitor kesehatan dan kematian harian</p>
       </div>
 
+      <ConfirmDialog
+        isOpen={isConfirmOpen}
+        onClose={() => {
+          setIsConfirmOpen(false);
+          setPendingDeleteId(null);
+        }}
+        onConfirm={confirmDelete}
+        title="Hapus Data Kesehatan"
+        description="Apakah Anda yakin ingin menghapus riwayat kesehatan ini? Tindakan ini tidak dapat dibatalkan."
+      />
+
       {/* Status Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white rounded-lg shadow p-6 border-l-4 border-red-500">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-gray-600 mb-1">Total Sakit (7 Hari)</div>
-              <div className="text-gray-900">
-                {mockKesehatan.reduce((acc, curr) => acc + curr.jum_sakit, 0)} ekor
+              <div className="text-gray-600 mb-1">Total Sakit (Semua)</div>
+              <div className="text-gray-900 text-2xl font-bold">
+                {listKesehatan.reduce((acc, curr) => acc + curr.jum_sakit, 0)} ekor
               </div>
             </div>
             <AlertCircle className="w-10 h-10 text-red-500" />
@@ -77,9 +173,9 @@ export function Kesehatan() {
         <div className="bg-white rounded-lg shadow p-6 border-l-4 border-gray-500">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-gray-600 mb-1">Total Kematian (7 Hari)</div>
-              <div className="text-gray-900">
-                {mockKesehatan.reduce((acc, curr) => acc + curr.jum_mati, 0)} ekor
+              <div className="text-gray-600 mb-1">Total Kematian (Semua)</div>
+              <div className="text-gray-900 text-2xl font-bold">
+                {listKesehatan.reduce((acc, curr) => acc + curr.jum_mati, 0)} ekor
               </div>
             </div>
             <AlertCircle className="w-10 h-10 text-gray-500" />
@@ -96,7 +192,7 @@ export function Kesehatan() {
             : 'text-gray-600 hover:text-gray-900'
             }`}
         >
-          Input Kesehatan
+          {editingId ? 'Edit Data' : 'Input Kesehatan'}
         </button>
         <button
           onClick={() => setActiveTab('riwayat')}
@@ -113,6 +209,7 @@ export function Kesehatan() {
       {activeTab === 'cek' && (
         <div className="bg-white rounded-lg shadow p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
+            <h2 className="text-lg font-semibold mb-4">{editingId ? 'Edit Data Kesehatan' : 'Form Cek Kesehatan'}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-gray-700 mb-2">
@@ -137,11 +234,12 @@ export function Kesehatan() {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
                   required
                 >
-                  <option value="">Pilih Kandang</option>
-                  <option value="1">Kandang A1</option>
-                  <option value="2">Kandang A2</option>
-                  <option value="3">Kandang B1</option>
-                  <option value="4">Kandang B2</option>
+                  <option value="">-- Pilih Kandang/Batch Ayam --</option>
+                  {listAyam.map(ayam => (
+                    <option key={ayam.ayam_id} value={ayam.ayam_id}>
+                      {ayam.kandang?.nomor_kandang || 'Unknown Kandang'} (Populasi: {ayam.jumlah_ayam})
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -151,8 +249,8 @@ export function Kesehatan() {
                 </label>
                 <input
                   type="number"
-                  value={formData.jum_sakit}
-                  onChange={(e) => setFormData({ ...formData, jum_sakit: parseInt(e.target.value) })}
+                  value={formData.jum_sakit === 0 ? '' : formData.jum_sakit}
+                  onChange={(e) => setFormData({ ...formData, jum_sakit: parseInt(e.target.value) || 0 })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
                   placeholder="0"
                 />
@@ -164,8 +262,8 @@ export function Kesehatan() {
                 </label>
                 <input
                   type="number"
-                  value={formData.jum_mati}
-                  onChange={(e) => setFormData({ ...formData, jum_mati: parseInt(e.target.value) })}
+                  value={formData.jum_mati === 0 ? '' : formData.jum_mati}
+                  onChange={(e) => setFormData({ ...formData, jum_mati: parseInt(e.target.value) || 0 })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
                   placeholder="0"
                 />
@@ -188,16 +286,17 @@ export function Kesehatan() {
             <div className="flex justify-end gap-3">
               <button
                 type="button"
-                className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                onClick={handleReset}
+                className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700"
               >
-                Reset
+                Batal / Reset
               </button>
               <button
                 type="submit"
                 className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
               >
                 <Plus className="w-4 h-4" />
-                Simpan Data
+                {editingId ? 'Update Data' : 'Simpan Data'}
               </button>
             </div>
           </form>
@@ -229,16 +328,41 @@ export function Kesehatan() {
                   <th className="px-6 py-3 text-left text-gray-700 whitespace-nowrap">Sakit</th>
                   <th className="px-6 py-3 text-left text-gray-700 whitespace-nowrap">Mati</th>
                   <th className="px-6 py-3 text-left text-gray-700 whitespace-nowrap">Catatan</th>
+                  <th className="px-6 py-3 text-left text-gray-700 whitespace-nowrap">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {filteredKesehatan.map((data) => (
+                {loading ? (
+                  <tr key="loading"><td colSpan={6} className="px-6 py-4 text-center">Memuat data...</td></tr>
+                ) : filteredKesehatan.length === 0 ? (
+                  <tr key="empty"><td colSpan={6} className="px-6 py-4 text-center">Belum ada riwayat kesehatan</td></tr>
+                ) : filteredKesehatan.map((data) => (
                   <tr key={data.cek_id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-gray-900 whitespace-nowrap">{data.tanggal}</td>
+                    <td className="px-6 py-4 text-gray-900 whitespace-nowrap">
+                      {new Date(data.tanggal).toLocaleDateString(['id-ID'], {
+                        day: 'numeric', month: 'short', year: 'numeric'
+                      })}
+                    </td>
                     <td className="px-6 py-4 text-gray-900 whitespace-nowrap">{data.nama_kandang}</td>
                     <td className="px-6 py-4 text-gray-900 whitespace-nowrap">{data.jum_sakit} ekor</td>
                     <td className="px-6 py-4 text-red-600 whitespace-nowrap">{data.jum_mati} ekor</td>
-                    <td className="px-6 py-4 text-gray-600 whitespace-nowrap">{data.catatan}</td>
+                    <td className="px-6 py-4 text-gray-600 whitespace-nowrap max-w-xs truncate" title={data.catatan}>{data.catatan}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleEdit(data)}
+                          className="text-blue-600 hover:text-blue-700" title="Edit"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(data.cek_id)}
+                          className="text-red-600 hover:text-red-700" title="Hapus"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>

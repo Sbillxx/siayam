@@ -27,6 +27,7 @@ export interface LaporanHarian {
     laporan_id: string;
     tanggal: string;
     ayam_id: string;
+    kandang_id: string;
     nama_kandang: string;
     telur_butir: number;
     telur_kg: number;
@@ -58,9 +59,10 @@ export interface Perawatan {
 }
 
 export interface User {
-    user_id: string;
+    user_id: number | string;
     username: string;
     nama_lengkap: string;
     role: string;
     created_at: string;
+    image_url?: string | null;
 }

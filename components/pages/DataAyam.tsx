@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { Edit2, Search, Plus, Trash2 } from 'lucide-react';
 import { Ayam, Kandang } from '@/lib/types';
+import { toast } from 'sonner';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 export function DataAyam() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -16,6 +18,10 @@ export function DataAyam() {
 
   // Forms
   const [formData, setFormData] = useState({ kandang_id: '', jumlah_ayam: '' });
+
+  // Confirm Dialog State
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   // Fetch Data
   const fetchData = async () => {
@@ -64,11 +70,12 @@ export function DataAyam() {
       if (!response.ok) throw new Error('Failed to add data');
 
       await fetchData();
+      toast.success('Data berhasil ditambahkan!');
       setIsAddModalOpen(false);
       setFormData({ kandang_id: '', jumlah_ayam: '' });
     } catch (error) {
       console.error('Error adding data:', error);
-      alert('Gagal menambahkan data');
+      toast.error('Gagal menambahkan data');
     }
   };
 
@@ -89,20 +96,26 @@ export function DataAyam() {
       if (!response.ok) throw new Error('Failed to update data');
 
       await fetchData();
+      toast.success('Data berhasil diperbarui!');
       setEditingId(null);
       setFormData({ kandang_id: '', jumlah_ayam: '' });
       setIsAddModalOpen(false);
     } catch (error) {
       console.error('Error updating data:', error);
-      alert('Gagal mengupdate data');
+      toast.error('Gagal mengupdate data');
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus data ini?')) return;
+    setPendingDeleteId(id);
+    setIsConfirmOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDeleteId) return;
 
     try {
-      const response = await fetch(`/api/ayam?id=${id}`, {
+      const response = await fetch(`/api/ayam?id=${pendingDeleteId}`, {
         method: 'DELETE',
       });
 
@@ -111,9 +124,10 @@ export function DataAyam() {
         throw new Error(errorData.error || 'Failed to delete data');
       }
       await fetchData();
+      toast.success('Data ayam berhasil dihapus!');
     } catch (error: any) {
       console.error('Error deleting data:', error);
-      alert(`Gagal menghapus data: ${error.message}`);
+      toast.error(`Gagal menghapus data: ${error.message}`);
     }
   };
 
@@ -153,6 +167,17 @@ export function DataAyam() {
           Tambah Data
         </button>
       </div>
+
+      <ConfirmDialog
+        isOpen={isConfirmOpen}
+        onClose={() => {
+          setIsConfirmOpen(false);
+          setPendingDeleteId(null);
+        }}
+        onConfirm={confirmDelete}
+        title="Hapus Data Ayam"
+        description="Apakah Anda yakin ingin menghapus data populasi ayam ini? Tindakan ini tidak dapat dibatalkan."
+      />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

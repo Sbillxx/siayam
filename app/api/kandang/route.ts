@@ -57,7 +57,16 @@ export async function DELETE(request: Request) {
         await query(sql, [id]);
 
         return NextResponse.json({ message: 'Success' }, { status: 200 });
-    } catch (error) {
-        return NextResponse.json({ error: 'Failed to delete kandang' }, { status: 500 });
+    } catch (error: any) {
+        console.error('Delete error:', error);
+
+        // Handle Foreign Key Constraint violation (MySQL Error 1451)
+        if (error.message && (error.message.includes('1451') || error.message.includes('foreign key constraint'))) {
+            return NextResponse.json({
+                error: 'Tidak bisa menghapus kandang karena masih memiliki data ayam atau laporan terkait. Silakan hapus data ayam di kandang ini terlebih dahulu.'
+            }, { status: 400 });
+        }
+
+        return NextResponse.json({ error: 'Gagal menghapus kandang' }, { status: 500 });
     }
 }

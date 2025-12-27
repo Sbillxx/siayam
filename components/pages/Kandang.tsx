@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { Edit2, Search, Home } from 'lucide-react';
 import type { Kandang as KandangType } from '@/lib/types';
+import { toast } from 'sonner';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 export function Kandang() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -14,6 +16,10 @@ export function Kandang() {
   // States for Add Kandang
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [addForm, setAddForm] = useState({ nomor_kandang: '', kapasitas: '', lokasi: '' });
+
+  // Confirm Dialog State
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [pendingDeleteInfo, setPendingDeleteInfo] = useState<{ id: string, nomor: string } | null>(null);
 
   // Fetch data from API
   const fetchKandang = async () => {
@@ -50,26 +56,36 @@ export function Kandang() {
       await fetchKandang(); // Refresh data
       setIsAddModalOpen(false);
       setAddForm({ nomor_kandang: '', kapasitas: '', lokasi: '' });
+      toast.success('Kandang berhasil ditambahkan!');
     } catch (error) {
       console.error('Error adding kandang:', error);
-      alert('Gagal menambahkan kandang');
+      toast.error('Gagal menambahkan kandang');
     }
   };
 
   const handleDelete = async (id: string, nomor: string) => {
-    if (!confirm(`Apakah Anda yakin ingin menghapus ${nomor}?`)) return;
+    setPendingDeleteInfo({ id, nomor });
+    setIsConfirmOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDeleteInfo) return;
 
     try {
-      const response = await fetch(`/api/kandang?id=${id}`, {
+      const response = await fetch(`/api/kandang?id=${pendingDeleteInfo.id}`, {
         method: 'DELETE',
       });
 
-      if (!response.ok) throw new Error('Failed to delete kandang');
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Gagal menghapus kandang');
+      }
 
       await fetchKandang(); // Refresh data
-    } catch (error) {
+      toast.success('Kandang berhasil dihapus!');
+    } catch (error: any) {
       console.error('Error deleting kandang:', error);
-      alert('Gagal menghapus kandang');
+      toast.error(error.message || 'Gagal menghapus kandang');
     }
   };
 
@@ -104,9 +120,10 @@ export function Kandang() {
         ));
         setEditingId(null);
         setEditForm(null);
+        toast.success('Data kandang berhasil diperbarui!');
       } catch (error) {
         console.error('Error updating kandang:', error);
-        alert('Gagal mengupdate kandang');
+        toast.error('Gagal mengupdate kandang');
       }
     }
   };
@@ -134,6 +151,17 @@ export function Kandang() {
         </button>
       </div>
 
+      <ConfirmDialog
+        isOpen={isConfirmOpen}
+        onClose={() => {
+          setIsConfirmOpen(false);
+          setPendingDeleteInfo(null);
+        }}
+        onConfirm={confirmDelete}
+        title="Hapus Kandang"
+        description={`Apakah Anda yakin ingin menghapus ${pendingDeleteInfo?.nomor}? Tindakan ini tidak dapat dibatalkan.`}
+      />
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white rounded-lg shadow p-6">
@@ -156,8 +184,8 @@ export function Kandang() {
 
       {/* Add Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg w-full max-w-md">
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 transition-all duration-300">
+          <div className="bg-white p-6 rounded-lg w-full max-w-md shadow-2xl border border-gray-100">
             <h2 className="text-xl font-bold mb-4">Tambah Kandang Baru</h2>
             <div className="space-y-4">
               <div>
@@ -174,7 +202,7 @@ export function Kandang() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Kapasitas</label>
                 <input
                   type="number"
-                  value={addForm.kapasitas}
+                  value={addForm.kapasitas === '' || addForm.kapasitas === '0' ? '' : addForm.kapasitas}
                   onChange={(e) => setAddForm({ ...addForm, kapasitas: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500"
                   placeholder="0"
@@ -258,8 +286,8 @@ export function Kandang() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <input
                           type="number"
-                          value={editForm.kapasitas}
-                          onChange={(e) => setEditForm({ ...editForm, kapasitas: parseInt(e.target.value) })}
+                          value={editForm.kapasitas === 0 ? '' : editForm.kapasitas}
+                          onChange={(e) => setEditForm({ ...editForm, kapasitas: parseInt(e.target.value) || 0 })}
                           className="w-24 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-green-500"
                         />
                       </td>

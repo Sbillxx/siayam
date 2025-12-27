@@ -34,29 +34,147 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+    let body: any = null;
     try {
-        const body = await request.json();
+        body = await request.json();
         const {
-            tanggal, ayam_id, telur_butir, telur_kg,
-            pakan_gr, ayam_hidup, ayam_mati, fcr, hd_percent, keterangan
+            tanggal,
+            ayam_id,
+            kandang_id,
+            telur_butir = 0,
+            telur_kg = 0,
+            pakan_gr = 0,
+            ayam_hidup = 0,
+            ayam_mati = 0,
+            fcr = 0,
+            hd_percent = 0,
+            keterangan = ''
         } = body;
 
         const laporan_id = crypto.randomUUID();
 
         const sql = `
       INSERT INTO laporan_harian 
-      (laporan_id, tanggal, ayam_id, telur_butir, telur_kg, pakan_gr, ayam_hidup, ayam_mati, fcr, hd_percent, keterangan) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (laporan_id, tanggal, ayam_id, kandang_id, telur_butir, telur_kg, pakan_gr, ayam_hidup, ayam_mati, fcr, hd_percent, keterangan) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
         await query(sql, [
-            laporan_id, tanggal, ayam_id, telur_butir, telur_kg,
-            pakan_gr, ayam_hidup, ayam_mati, fcr, hd_percent, keterangan
+            laporan_id,
+            tanggal,
+            ayam_id,
+            kandang_id,
+            Number(telur_butir),
+            Number(telur_kg),
+            Number(pakan_gr),
+            Number(ayam_hidup),
+            Number(ayam_mati),
+            Number(fcr),
+            Number(hd_percent),
+            keterangan || null
         ]);
 
         return NextResponse.json({ message: 'Success', laporan_id }, { status: 201 });
+    } catch (error: any) {
+        console.error('SERVER ERROR IN LAPORAN POST:', {
+            error: error.message,
+            code: error.code,
+            sqlMessage: error.sqlMessage,
+            body
+        });
+        return NextResponse.json({
+            error: 'Failed to create laporan',
+            details: error.sqlMessage || error.message
+        }, { status: 500 });
+    }
+}
+
+export async function PUT(request: Request) {
+    let body: any = null;
+    try {
+        const { searchParams } = new URL(request.url);
+        const id = searchParams.get('id');
+
+        if (!id) {
+            return NextResponse.json({ error: 'ID is required' }, { status: 400 });
+        }
+
+        body = await request.json();
+        const {
+            tanggal,
+            ayam_id,
+            kandang_id,
+            telur_butir = 0,
+            telur_kg = 0,
+            pakan_gr = 0,
+            ayam_hidup = 0,
+            ayam_mati = 0,
+            fcr = 0,
+            hd_percent = 0,
+            keterangan = ''
+        } = body;
+
+        const sql = `
+      UPDATE laporan_harian 
+      SET tanggal = ?, 
+          ayam_id = ?, 
+          kandang_id = ?,
+          telur_butir = ?, 
+          telur_kg = ?, 
+          pakan_gr = ?, 
+          ayam_hidup = ?, 
+          ayam_mati = ?, 
+          fcr = ?, 
+          hd_percent = ?, 
+          keterangan = ?
+      WHERE laporan_id = ?
+    `;
+
+        await query(sql, [
+            tanggal,
+            ayam_id,
+            kandang_id,
+            Number(telur_butir),
+            Number(telur_kg),
+            Number(pakan_gr),
+            Number(ayam_hidup),
+            Number(ayam_mati),
+            Number(fcr),
+            Number(hd_percent),
+            keterangan || null,
+            id
+        ]);
+
+        return NextResponse.json({ message: 'Success' });
+    } catch (error: any) {
+        console.error('SERVER ERROR IN LAPORAN PUT:', {
+            error: error.message,
+            code: error.code,
+            sqlMessage: error.sqlMessage,
+            body
+        });
+        return NextResponse.json({
+            error: 'Failed to update laporan',
+            details: error.sqlMessage || error.message
+        }, { status: 500 });
+    }
+}
+
+export async function DELETE(request: Request) {
+    try {
+        const { searchParams } = new URL(request.url);
+        const id = searchParams.get('id');
+
+        if (!id) {
+            return NextResponse.json({ error: 'ID is required' }, { status: 400 });
+        }
+
+        const sql = 'DELETE FROM laporan_harian WHERE laporan_id = ?';
+        await query(sql, [id]);
+
+        return NextResponse.json({ message: 'Success' });
     } catch (error) {
         console.error(error);
-        return NextResponse.json({ error: 'Failed to create laporan' }, { status: 500 });
+        return NextResponse.json({ error: 'Failed to delete laporan' }, { status: 500 });
     }
 }

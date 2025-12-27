@@ -10,10 +10,12 @@ import { Pakan } from './pages/Pakan';
 import { Kandang } from './pages/Kandang';
 import { Analitik } from './pages/Analitik';
 import { UserProfile } from './pages/UserProfile';
+import { User as UserIcon } from 'lucide-react';
 
 interface DashboardProps {
-  currentUser: { name: string; username: string } | null;
+  currentUser: { id: number | string; name: string; username: string; image_url?: string | null } | null;
   onLogout: () => void;
+  onUpdateProfile: (newData: any) => void;
 }
 
 export type PageType =
@@ -26,7 +28,7 @@ export type PageType =
   | 'kandang'
   | 'profil';
 
-export function Dashboard({ currentUser, onLogout }: DashboardProps) {
+export function Dashboard({ currentUser, onLogout, onUpdateProfile }: DashboardProps) {
   const [currentPage, setCurrentPage] = useState<PageType>('laporan-harian');
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -47,7 +49,13 @@ export function Dashboard({ currentUser, onLogout }: DashboardProps) {
       case 'kandang':
         return <Kandang />;
       case 'profil':
-        return <UserProfile currentUser={currentUser} onLogout={onLogout} />;
+        return (
+          <UserProfile
+            currentUser={currentUser}
+            onLogout={onLogout}
+            onUpdateProfile={onUpdateProfile}
+          />
+        );
       default:
         return <LaporanHarian />;
     }
@@ -69,9 +77,22 @@ export function Dashboard({ currentUser, onLogout }: DashboardProps) {
             <div className="block lg:hidden flex-1 font-bold text-green-800">
               SI Ayam Petelur
             </div>
-            <div className="text-gray-700">
-              Selamat datang, <span className="font-medium">{currentUser?.name}</span>
-            </div>
+            <button
+              onClick={() => setCurrentPage('profil')}
+              className="flex items-center gap-3 text-gray-700 hover:bg-gray-100 p-1.5 rounded-xl transition-all active:scale-95 group"
+            >
+              <div className="text-right hidden sm:block">
+                <div className="text-sm font-medium text-gray-900 group-hover:text-green-700 transition-colors">{currentUser?.name}</div>
+                <div className="text-xs text-gray-500">@{currentUser?.username}</div>
+              </div>
+              <div className="w-10 h-10 rounded-full border border-gray-100 overflow-hidden bg-green-50 flex items-center justify-center group-hover:border-green-200 transition-all">
+                {currentUser?.image_url ? (
+                  <img src={currentUser.image_url} alt="User" className="w-full h-full object-cover" />
+                ) : (
+                  <UserIcon className="w-5 h-5 text-green-600" />
+                )}
+              </div>
+            </button>
           </div>
         </header>
 
